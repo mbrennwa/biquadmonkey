@@ -28,11 +28,18 @@
 % Contact: mbrennwa@gmail.com
 
 % ask for n and fs:
-n  = input ('Filter order (n = 1...16): ');
-if n > 16
-	error ('Can not use n > 16.')
+n  = round (input('Filter order (default: n=3): '));
+if isempty(n)
+	n = 3
 end
-fs = input ('DSP sampling rate (Hz): ');
+if n < 1
+	n = 1;
+end
+
+fs = abs (input('DSP sampling rate (Hz, default: fs=44100): '));
+if isempty(fs)
+	fs = 44100
+end
 
 % load data file with target response curve here (magnitude in dB and phase in degrees)
 disp ('Select data file with target filter function (f/mag/phase)...')
@@ -41,6 +48,9 @@ u = load ([FPATH FNAME]);
 f_target = u(:,1);
 mag_target = u(:,2);
 phase_target = u(:,3);
+
+fLow  = min (f_target);
+fHigh = max (f_target);
 
 % remove target data below Nyquist:
 k = find (f_target < fs/2);
@@ -56,10 +66,11 @@ H_target = 10.^(mag_target / 20) .* exp(i*phase_target / 180*pi);
 [B,A] = invfreq(H_target,2*pi*f_target/fs,n,n);
 
 % evaluate transfer function of the fitted IIR filter
-[H_IIR,W_IIR] = freqz (B,A,2*pi*f_target/fs);
-mag_IIR   = 20*log10(abs(H_IIR));
-phase_IIR = arg(H_IIR)/pi*180;
-f_IIR     =  W_IIR/pi/2*fs;
+f_IIR         = logspace(log10(fLow/2),log10(fs/2),1000);
+[H_IIR,W_IIR] = freqz (B,A,2*pi*f_IIR/fs);
+mag_IIR       = 20*log10(abs(H_IIR));
+phase_IIR     = arg(H_IIR)/pi*180;
+f_IIR         =  W_IIR/pi/2*fs;
 
 % determine poles and zeros of IIR filter:
 [Z,P,G] = tf2zp (B,A);
@@ -94,7 +105,12 @@ disp (sprintf('***** sampling rate: %g Hz',fs))
 disp (sprintf('***** filter order: %i',n))
 disp('');
 
-for k = 1:8
+N_BIQ = N_BIQ = max ( [ 8 , round(n/2) ] );
+if N_BIQ > 8
+	disp (sprintf('***** WARNING: you used n=%i. This requires %i biquads, but the miniDSP only allows 8 per DSP !!!',n,N_BIQ))
+end
+
+for k = 1:N_BIQ
 	if k <= size(BIQ,1)
 		a0 =  1;
 		a1 = -BIQ(k,5) / BIQ(k,4);
@@ -116,7 +132,7 @@ for k = 1:8
 	disp (sprintf('b1=%.15f,',b1))
 	disp (sprintf('b2=%.15f,',b2))
 	disp (sprintf('a1=%.15f,',a1))
-	if k < 8
+	if k < N_BIQ
 		disp (sprintf('a2=%.15f,',a2))
 	else
 		disp (sprintf('a2=%.15f',a2))
