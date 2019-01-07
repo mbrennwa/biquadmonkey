@@ -45,6 +45,9 @@ end
 disp ('Select data file with target filter function (f/mag/phase)...')
 [FNAME, FPATH, FLTIDX] = uigetfile ();
 u = load ([FPATH FNAME]);
+disp ('Fitting biquad filter to target...')
+
+% Prepare data:
 f_target = u(:,1);
 mag_target = u(:,2);
 phase_target = u(:,3);
@@ -84,13 +87,13 @@ clf;
 k_target = find ( f_target > 0 ); k_IIR = find ( f_IIR > 0 );
 ff = [ min([f_target(k_target)(:);f_IIR(k_IIR)(:)]) fs/2 ];
 subplot(2,1,1);
-semilogx ( f_target(k_target),mag_target(k_target),'r-' , f_IIR(k_IIR),mag_IIR(k_IIR),'k-' );
+semilogx ( f_target(k_target),mag_target(k_target),'r-','linewidth',2 , f_IIR(k_IIR),mag_IIR(k_IIR),'k-','linewidth',1 );
 grid on
 xlim(ff);
 ylabel ('Gain (dB)')
 legend ('Target','Biquad')
 subplot(2,1,2);
-semilogx ( f_target(k_target),phase_target(k_target),'r-' , f_IIR(k_IIR),phase_IIR(k_IIR),'k-' );
+semilogx ( f_target(k_target),phase_target(k_target),'r-','linewidth',2 , f_IIR(k_IIR),phase_IIR(k_IIR),'k-','linewidth',1 );
 grid on
 xlim(ff);
 ylabel ('Phase (deg.)')
