@@ -55,7 +55,7 @@ phase_target = u(:,3);
 fLow  = min (f_target);
 fHigh = max (f_target);
 
-% remove target data below Nyquist:
+% remove target data above Nyquist of DSP:
 k = find (f_target < fs/2);
 f_target = f_target(k);
 mag_target = mag_target(k);
@@ -68,6 +68,12 @@ H_target = 10.^(mag_target / 20) .* exp(i*phase_target / 180*pi);
 % A, B: coefficients of polynomials or order n in H(z) = B(z) / A(z), where z = exp(i*omega)
 [B,A] = invfreq(H_target,2*pi*f_target/fs,n,n);
 
+% plot poles and zeros in the z-plane
+
+figure(1);
+clf;
+zplane(B,A);
+
 % evaluate transfer function of the fitted IIR filter
 f_IIR         = logspace(log10(fLow/2),log10(fs/2),1000);
 [H_IIR,W_IIR] = freqz (B,A,2*pi*f_IIR/fs);
@@ -78,12 +84,19 @@ f_IIR         =  W_IIR/pi/2*fs;
 % determine poles and zeros of IIR filter:
 [Z,P,G] = tf2zp (B,A);
 
+% check for stability:
+if any (abs(P) >= 1)
+	% Not all poles are inside the unit circle!
+	disp ('');
+	disp ('***** WARNING: the IIR filter is not stable!!! *****')
+end
+
 % convert poles and zeros to biquads:
 BIQ = zp2sos (Z,P,G);
 
 % plot results
+figure(2);
 clf;
-
 k_target = find ( f_target > 0 ); k_IIR = find ( f_IIR > 0 );
 ff = [ min([f_target(k_target)(:);f_IIR(k_IIR)(:)]) fs/2 ];
 subplot(2,1,1);
