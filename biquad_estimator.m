@@ -41,22 +41,18 @@ u = load ([FPATH FNAME]);
 f_target = u(:,1);
 mag_target = u(:,2);
 phase_target = u(:,3);
-% phase_target = unwrap (phase_target/180*pi);
 
-
-
+% remove target data below Nyquist:
 k = find (f_target < fs/2);
 f_target = f_target(k);
 mag_target = mag_target(k);
 phase_target = phase_target(k);
-
 
 % convert target response (magnitude/dB and phase/deg) to complex transfer function H(z):
 H_target = 10.^(mag_target / 20) .* exp(i*phase_target / 180*pi);
 
 % fit IIR filter to the target transfer function
 % A, B: coefficients of polynomials or order n in H(z) = B(z) / A(z), where z = exp(i*omega)
-
 [B,A] = invfreq(H_target,2*pi*f_target/fs,n,n);
 
 % evaluate transfer function of the fitted IIR filter
