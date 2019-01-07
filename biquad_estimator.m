@@ -121,6 +121,15 @@ for k = 1:N_BIQ
 		b0 =  BIQ(k,1) / BIQ(k,4);
 		b1 =  BIQ(k,2) / BIQ(k,4);
 		b2 =  BIQ(k,3) / BIQ(k,4);
+
+		% check stability (following the miniDSP spreadsheet):
+		D = a1^2 - 4*a0*a2;
+		if D < 0
+			stab = sqrt ( a1/(2*a0)^2 - D/(2*a0)^2 );
+		else
+			stab = (-a1-sqrt(D))/2*a0;
+		end
+
 	else
 		a0 = 1;
 		a1 = 0;
@@ -128,9 +137,15 @@ for k = 1:N_BIQ
 		b0 = 1;
 		b1 = 0;
 		b2 = 0;
+		
+		stab = 0;
 	end
-
-	disp (sprintf('biquad%i,',k))
+	if abs(stab) < 1
+		stab = '';
+	else
+		stab = ' *** NOT STABLE ***';
+	end
+	disp (sprintf('biquad%i%s,',k,stab))
 	disp (sprintf('b0=%.15f,',b0))
 	disp (sprintf('b1=%.15f,',b1))
 	disp (sprintf('b2=%.15f,',b2))
