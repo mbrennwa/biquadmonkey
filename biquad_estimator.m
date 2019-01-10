@@ -41,6 +41,11 @@ if isempty(fs)
 	fs = 44100
 end
 
+tau = abs (input('DSP time delay to improve stability of the IIR filter (ms, default: tau=0): '));
+if isempty(tau)
+	tau = 0
+end
+
 % load data file with target response curve here (magnitude in dB and phase in degrees)
 disp ('Select data file with target filter function (f/mag/phase)...')
 [FNAME, FPATH, FLTIDX] = uigetfile ();
@@ -55,18 +60,21 @@ phase_target = u(:,3);
 fLow  = min (f_target);
 fHigh = max (f_target);
 
-% remove target data above Nyquist of DSP:
+% remove target data above Nyquist frequency of DSP sampling rate:
 k = find (f_target < fs/2);
 f_target = f_target(k);
 mag_target = mag_target(k);
 phase_target = phase_target(k);
 
-% convert target response (magnitude/dB and phase/deg) to complex transfer function H(z):
-H_target = 10.^(mag_target / 20) .* exp(i*phase_target / 180*pi);
+% convert target response (magnitude/dB and phase/deg) to complex transfer function H_target(z):
+w   = pi*f_target/(fs/2); % normalized frequency (0...pi)
+r   = 10.^(mag_target / 20); % magnitude of H_target
+phi = phase_target / 180*pi - 2*pi*f_target*(tau*1000); % phase of H_target, take into accout time delay, see https://dsp.stackexchange.com/questions/31352/why-can-adding-delay-improve-the-phase-fit-in-fitting-complex-transfer-functions/31364#31364
+H_target = r .* exp(i*phi);
 
 % fit IIR filter to the target transfer function
 % A, B: coefficients of polynomials or order n in H(z) = B(z) / A(z), where z = exp(i*omega)
-[B,A] = invfreq(H_target,2*pi*f_target/fs,n,n);
+[B,A] = invfreq(H_target,w,n,n);
 
 % plot poles and zeros in the z-plane
 
@@ -87,7 +95,7 @@ f_IIR         =  W_IIR/pi/2*fs;
 % check for stability:
 if any (abs(P) >= 1)
 	% Not all poles are inside the unit circle!
-	disp ('');
+	disp (''); disp ('');
 	disp ('***** WARNING: the IIR filter is not stable!!! *****')
 end
 
@@ -135,14 +143,6 @@ for k = 1:N_BIQ
 		b1 =  BIQ(k,2) / BIQ(k,4);
 		b2 =  BIQ(k,3) / BIQ(k,4);
 
-		% check stability (following the miniDSP spreadsheet):
-		D = a1^2 - 4*a0*a2;
-		if D < 0
-			stab = sqrt ( a1/(2*a0)^2 - D/(2*a0)^2 );
-		else
-			stab = (-a1-sqrt(D))/2*a0;
-		end
-
 	else
 		a0 = 1;
 		a1 = 0;
@@ -151,14 +151,9 @@ for k = 1:N_BIQ
 		b1 = 0;
 		b2 = 0;
 		
-		stab = 0;
 	end
-	if abs(stab) < 1
-		stab = '';
-	else
-		stab = ' *** NOT STABLE ***';
-	end
-	disp (sprintf('biquad%i%s,',k,stab))
+
+	disp (sprintf('biquad%i,',k))
 	disp (sprintf('b0=%.15f,',b0))
 	disp (sprintf('b1=%.15f,',b1))
 	disp (sprintf('b2=%.15f,',b2))
