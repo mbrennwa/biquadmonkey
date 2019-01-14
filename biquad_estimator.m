@@ -1,8 +1,9 @@
 % m-file program to determine biquad filter coefficients for an IIR filter from a given filter transfer function:
 %
 % - load target transfer function data from an ASCII data file (column-1: frequency in Hz, column-2: gain in dB, column-3: phase in degrees)
-% - ask for IIR filter order (n = 1...8) and sampling rate
-% - fit IIR filter of order n to target function
+% - ask for FDLS parameter range (maximum numbers of poles, zeros, and time delay)
+% - ask for DSP sampling rate
+% - fit IIR filter to target function using FDLS method
 % - determine biquad coefficients for IIR filter
 % - plot transfer functions of IIR filter vs target filter
 % - print biquad coefficients for use with miniDSP on console
@@ -27,30 +28,40 @@
 % Copyright (C) 2019 Matthias S. Brennwald.
 % Contact: mbrennwa@gmail.com
 
-% ask for n and fs:
-n  = round (input('Filter order (default: n=3): '));
-if isempty(n)
-	n = 3
-end
-if n < 1
-	n = 1;
-end
-
-fs = abs (input('DSP sampling rate (Hz, default: fs=44100): '));
-if isempty(fs)
-	fs = 44100
-end
-
-tau = abs (input('DSP time delay to improve stability of the IIR filter (ms, default: tau=0): '));
-if isempty(tau)
-	tau = 0
-end
-
 % load data file with target response curve here (magnitude in dB and phase in degrees)
 disp ('Select data file with target filter function (f/mag/phase)...')
 [FNAME, FPATH, FLTIDX] = uigetfile ();
 u = load ([FPATH FNAME]);
-disp ('Fitting biquad filter to target...')
+
+% ask for n and fs:
+fs = abs (input('DSP sampling rate (Hz, default: fs=96000): '));
+if isempty(fs)
+	fs = 96000
+end
+
+NP  = round (input('Maximum number of poles allowed in the filter (default: NP=16): '));
+if isempty(NP)
+	NP = 16
+end
+if NP < 1
+	NP = 1
+end
+
+NZ  = round (input('Maximum number of zeros allowed in the filter (default: NZ=16): '));
+if isempty(NZ)
+	NZ = 16
+end
+if NZ < 1
+	NZ = 1;
+end
+
+NT = abs (input('Maximum time delay (number of samples) allowed to improve stability of the IIR filter (default: NT = 10): '));
+if isempty(NT)
+	NT = 10
+end
+
+disp('');
+disp ('Fitting biquad filter to target...');
 
 % Prepare data:
 f_target = u(:,1);
@@ -69,18 +80,44 @@ phase_target = phase_target(k);
 % convert target response (magnitude/dB and phase/deg) to complex transfer function H_target(z):
 w   = pi*f_target/(fs/2); % normalized frequency (0...pi)
 r   = 10.^(mag_target / 20); % magnitude of H_target
-phi = phase_target / 180*pi - 2*pi*f_target*(tau*1000); % phase of H_target, take into accout time delay, see https://dsp.stackexchange.com/questions/31352/why-can-adding-delay-improve-the-phase-fit-in-fitting-complex-transfer-functions/31364#31364
+phi = phase_target / 180*pi; % phase of H_target
 H_target = r .* exp(i*phi);
 
-% fit IIR filter to the target transfer function
-% A, B: coefficients of polynomials or order n in H(z) = B(z) / A(z), where z = exp(i*omega)
-[B,A] = invfreq(H_target,w,n,n);
+% fit IIR filter to the target transfer function using all possible parameter combinations
+
+% wgt = 1./sqrt(abs(H_target));
+wgt = 1./abs(H_target).^0.4;
+x = [];
+k = 1;
+for np = 1:NP
+	for nz = 1:NZ for nt = 1:NT
+		[B,A] = fdls (H_target,w,np,nz,fs,wgt,nt); % determine B and A for current np,nz,dt
+		H = freqz (B,A,w); % evaluate transfer function of current B and A
+		dH = H - H_target; % residuals to target
+		d = sum ( abs(dH).^2 ./ wgt ); % weighted sum of residuals
+		x = [ x ; [ np nz nt d ] ];
+		k = k+1;
+	end end
+	disp (sprintf('Progress: %g %%',np/NP*100))
+end
+
+% find best fit:
+[u,k]=min(x(:,4));
+np = x(k,1);
+nz = x(k,2);
+nt = x(k,3);
+disp ('');
+disp (sprintf('Best fit result for NP = %i poles, NZ = %i zeros and NT = %i delay samples.',np,nz,nt));
+disp ('');
+
+% re-calculate B and A:
+[B,A] = fdls (H_target,w,np,nz,fs,wgt,nt);
 
 % plot poles and zeros in the z-plane
-
 figure(1);
 clf;
-zplane(B,A);
+zplane(B(:)',A(:)');
+title ('Poles (x) and zeros (0)')
 
 % evaluate transfer function of the fitted IIR filter
 f_IIR         = logspace(log10(fLow/2),log10(fs/2),1000);
@@ -122,16 +159,20 @@ xlabel ('Frequency (Hz)');
 
 
 % print miniDSP coefficients to console:
-
-disp(''); disp('');
+n = max([np,nz]);
+disp('');
 disp ('***** miniDSP biquad coefficients')
 disp (sprintf('***** sampling rate: %g Hz',fs))
 disp (sprintf('***** filter order: %i',n))
+disp (sprintf('***** number of zeros: %i',nz))
+disp (sprintf('***** number of poles: %i',np))
+disp (sprintf('***** time delay: %i samples',nt))
+
 disp('');
 
 N_BIQ = N_BIQ = max ( [ 8 , round(n/2) ] );
 if N_BIQ > 8
-	disp (sprintf('***** WARNING: you used n=%i. This requires %i biquads, but the miniDSP only allows 8 per DSP !!!',n,N_BIQ))
+	disp (sprintf('***** WARNING: filter order n=%i. This requires %i biquads, but the miniDSP only allows 8 per DSP !!!',n,N_BIQ))
 end
 
 for k = 1:N_BIQ
@@ -164,10 +205,3 @@ for k = 1:N_BIQ
 		disp (sprintf('a2=%.15f',a2))
 	end
 end
-
-
-
-
-
-
-
