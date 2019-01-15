@@ -60,22 +60,40 @@ if isempty(NT)
 	NT = 10
 end
 
-disp('');
-disp ('Fitting biquad filter to target...');
-
 % Prepare data:
 f_target = u(:,1);
 mag_target = u(:,2);
 phase_target = u(:,3);
-
-fLow  = min (f_target);
-fHigh = max (f_target);
 
 % remove target data above Nyquist frequency of DSP sampling rate:
 k = find (f_target < fs/2);
 f_target = f_target(k);
 mag_target = mag_target(k);
 phase_target = phase_target(k);
+
+fLow  = min (f_target);
+fHigh = max (f_target);
+
+% make sure data is sampled at (approximately) linear frequency intervals:
+do_resampling = false; % use do_resampling = false if you want to change from log-sampled frequency data
+if do_resampling
+	df = diff(f_target);
+	if mean(df(round(length(f_target)/4*3):end)) / mean (df(1:ceil(length(f_target)/4)))*30 > fHigh/fLow
+		
+		disp('');
+		disp ('Resampling target data to linear frequency spacing...');
+
+		% looks like data is sampled at log-spaced frequencies (or similar). Change to linear...
+		ff = linspace (fLow,fHigh,length(f_target));
+		mag_target   = interp1 (f_target,mag_target,ff);
+		phase_target = interp1 (f_target,phase_target,ff);
+		f_target = ff;
+	end
+end
+
+% start working:
+disp('');
+disp ('Fitting biquad filter to target...');
 
 % convert target response (magnitude/dB and phase/deg) to complex transfer function H_target(z):
 w   = pi*f_target/(fs/2); % normalized frequency (0...pi)
@@ -84,20 +102,22 @@ phi = phase_target / 180*pi; % phase of H_target
 H_target = r .* exp(i*phi);
 
 % fit IIR filter to the target transfer function using all possible parameter combinations
-
-% wgt = 1./sqrt(abs(H_target));
+%%%% wgt = 1./sqrt(abs(H_target));
 wgt = 1./abs(H_target).^0.4;
 x = [];
 k = 1;
 for np = 1:NP
-	for nz = 1:NZ for nt = 1:NT
-		[B,A] = fdls (H_target,w,np,nz,fs,wgt,nt); % determine B and A for current np,nz,dt
-		H = freqz (B,A,w); % evaluate transfer function of current B and A
-		dH = H - H_target; % residuals to target
-		d = sum ( abs(dH).^2 ./ wgt ); % weighted sum of residuals
-		x = [ x ; [ np nz nt d ] ];
-		k = k+1;
-	end end
+	for nz = 1:NZ
+		for nt = 1:NT
+			[B,A] = fdls (H_target,w,np,nz,fs,wgt,nt); % determine B and A for current np,nz,dt
+			H = freqz (B,A,w); % evaluate transfer function of current B and A
+			dH = (abs(H) - abs(H_target)) ./ wgt; % weighted residuals to target gain (ignore phase, which may be offset due to additional time delay)
+			k = find ( abs(dH) < 3*std(dH) ); % index to "non-outliers" (to get more robust assessment of the "goodness of fit")
+			d = sum ( abs(dH(k)).^2 ./ wgt(k) ); % weighted sum of residuals
+			x = [ x ; [ np nz nt d ] ];
+			k = k+1;
+		end
+	end
 	disp (sprintf('Progress: %g %%',np/NP*100))
 end
 

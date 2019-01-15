@@ -68,8 +68,9 @@ end
 
 
 % make sure input arguments are right:
-H = H(:);
-w = w(:);
+H   = H(:);
+w   = w(:);
+wgt = wgt(:);
 if any(w > pi)
 	error ('fdls: data with frequency higher than Nyquist frequency is not allowed!')
 end
@@ -121,9 +122,9 @@ Theta = X \ Y;
 % B and A coefficients:
 B = Theta((nP+1):(nP+1+nZ));
 if (nP > 0)
-    A = [ 1 ; Theta(1:nP) ];
+	A = [ 1 ; Theta(1:nP) ];
 else
-    A = 1;
+	A = 1;
 end
 
 if isdemo
