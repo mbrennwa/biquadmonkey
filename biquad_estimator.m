@@ -17,8 +17,8 @@
 % (at your option) any later version.
 % 
 % BIQUADMONKEY is distributed in the hope that it will be useful,
-% but WITHOUT ANY WARRANTY; without even the implied warranty of
-% MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+% but WITHOUT ANY WARRANT2Y; without even the implied warranty of
+% MERCHANT2ABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 % GNU General Public License for more details.
 % 
 % You should have received a copy of the GNU General Public License
@@ -39,25 +39,49 @@ if isempty(fs)
 	fs = 96000
 end
 
-NP  = round (input('Maximum number of poles allowed in the filter (default: NP=16): '));
-if isempty(NP)
-	NP = 16
+NP1  = round (input('Miniumum number of poles allowed in the filter (default: NP1=1): '));
+if isempty(NP1)
+	NP1 = 1
 end
-if NP < 1
-	NP = 1
-end
-
-NZ  = round (input('Maximum number of zeros allowed in the filter (default: NZ=16): '));
-if isempty(NZ)
-	NZ = 16
-end
-if NZ < 1
-	NZ = 1;
+if NP1 < 1
+	NP1 = 1
 end
 
-NT = abs (input('Maximum time delay (number of samples) allowed to improve stability of the IIR filter (default: NT = 10): '));
-if isempty(NT)
-	NT = 10
+NP2  = round (input('Minium number of poles allowed in the filter (default: NP2=16): '));
+if isempty(NP2)
+	NP2 = 16
+end
+if NP2 < NP1
+	NP2 = NP1
+end
+
+NZ1  = round (input('Minimum number of zeros allowed in the filter (default: NZ1=1): '));
+if isempty(NZ1)
+	NZ1 = 1
+end
+if NZ1 < 1
+	NZ1 = 1
+end
+
+NZ2  = round (input('Maximum number of zeros allowed in the filter (default: NZ2=16): '));
+if isempty(NZ2)
+	NZ2 = 16
+end
+if NZ2 < NZ1
+	NZ2 = NZ1
+end
+
+NT1 = abs (input('Minimum time delay (number of samples) allowed to improve stability of the IIR filter (default: NT1 = 0): '));
+if isempty(NT1)
+	NT1 = 0
+end
+
+NT2 = abs (input('Maximum time delay (number of samples) allowed to improve stability of the IIR filter (default: NT2 = 10): '));
+if isempty(NT2)
+	NT2 = 10
+end
+if NT2 < NT1
+	NT2 = NT1
 end
 
 % Prepare data:
@@ -106,9 +130,16 @@ H_target = r .* exp(i*phi);
 wgt = 1./abs(H_target).^0.4;
 x = [];
 k = 1;
-for np = 1:NP
-	for nz = 1:NZ
-		for nt = 1:NT
+
+do_plots = true; % use do_plots = false to avoid plotting every single fit (to speed up the program)
+if do_plots
+	figure(3);
+	clf;
+end
+
+for np = NP1:NP2
+	for nz = NZ1:NZ2
+		for nt = NT1:NT2
 			[B,A] = fdls (H_target,w,np,nz,fs,wgt,nt); % determine B and A for current np,nz,dt
 			H = freqz (B,A,w); % evaluate transfer function of current B and A
 			dH = (abs(H) - abs(H_target)) ./ wgt; % weighted residuals to target gain (ignore phase, which may be offset due to additional time delay)
@@ -116,9 +147,20 @@ for np = 1:NP
 			d = sum ( abs(dH(k)).^2 ./ wgt(k) ); % weighted sum of residuals
 			x = [ x ; [ np nz nt d ] ];
 			k = k+1;
+
+			if do_plots
+				% plot fit vs target:
+				HH = freqz (B,A,w);
+				MM = 20*log10(abs(H));
+				PP = arg(H_IIR)/pi*180;
+				semilogx ( f_target,mag_target,'r-','linewidth',2 , f_target,MM,'k-','linewidth',1 );
+				title (sprintf('np = %i, nz = %i, nt = %i',np,nz,nt))
+				pause (0.01);
+			end
+
 		end
 	end
-	disp (sprintf('Progress: %g %%',np/NP*100))
+	disp (sprintf('Progress: %g %%',(np-NP1+1)/(NP2-NP1+1)*100))
 end
 
 % find best fit:
@@ -127,7 +169,7 @@ np = x(k,1);
 nz = x(k,2);
 nt = x(k,3);
 disp ('');
-disp (sprintf('Best fit result for NP = %i poles, NZ = %i zeros and NT = %i delay samples.',np,nz,nt));
+disp (sprintf('Best fit result for NP2 = %i poles, NZ2 = %i zeros and NT2 = %i delay samples.',np,nz,nt));
 disp ('');
 
 % re-calculate B and A:
